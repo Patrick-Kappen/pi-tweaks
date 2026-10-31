@@ -1,6 +1,6 @@
 {
   "name": "pi-tweaks",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "pi extensions for the little changes that do not fit anywhere else",
   "type": "module",
