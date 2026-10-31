@@ -17,12 +17,18 @@ const project = join(root, "project");
 mkdirSync(agentDir);
 mkdirSync(project);
 writeFileSync(join(root, "prompt.md"), "You are the pi-tweaks test agent.\n");
-writeFileSync(join(agentDir, "pi-tweaks.json"), JSON.stringify({ "system-prompt": { file: "../prompt.md" } }));
+writeFileSync(
+  join(agentDir, "pi-tweaks.json"),
+  JSON.stringify({ "system-prompt": { global: { file: "../prompt.md" } } }),
+);
+// On only in repositories of other-owner: not in the test project.
+const elsewhere = join(root, "elsewhere.json");
+writeFileSync(elsewhere, JSON.stringify({ "system-prompt": { repos: { "other-owner/*": { text: "Elsewhere." } } } }));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 let runs = 0;
 
-function systemPromptOf(args: string[]): string {
+function systemPromptOf(args: string[], extraEnv: Record<string, string> = {}): string {
   const capture = join(root, `capture-${runs++}.txt`);
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("PI_")));
   execFileSync(
@@ -30,7 +36,7 @@ function systemPromptOf(args: string[]): string {
     [cli, "-ne", "-e", provider, "-e", tweak, "--provider", "faux", "--model", "echo", ...args, "hi"],
     {
       cwd: project,
-      env: { ...env, HOME: root, PI_CODING_AGENT_DIR: agentDir, PI_OFFLINE: "1", CAPTURE_FILE: capture },
+      env: { ...env, HOME: root, PI_CODING_AGENT_DIR: agentDir, PI_OFFLINE: "1", CAPTURE_FILE: capture, ...extraEnv },
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 60_000,
     },
@@ -60,5 +66,11 @@ describe("pi -ne -e system-prompt", () => {
     const prompt = systemPromptOf(["-p", "--system-prompt", "One-off prompt."]);
     expect(prompt.startsWith("One-off prompt.\n\n<tools>\n")).toBe(true);
     expect(prompt).not.toContain("pi-tweaks test agent");
+  });
+
+  test("where no scope matches, pi's own prompt stays", () => {
+    const prompt = systemPromptOf(["-p"], { PI_TWEAKS_CONFIG: elsewhere });
+    expect(prompt).toContain("expert coding assistant");
+    expect(prompt).not.toContain("Elsewhere.");
   });
 });

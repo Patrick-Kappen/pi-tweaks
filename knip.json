@@ -1,6 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["extensions/*/index.ts", "test/fixtures/*.ts"],
-  "project": ["extensions/**/*.ts", "test/**/*.ts"],
-  "ignoreBinaries": ["biome"]
+  "project": ["extensions/**/*.ts", "test/**/*.ts"]
 }

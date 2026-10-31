@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
-import { expandHome } from "./config.ts";
+import { resolve } from "node:path";
+import { expandHome } from "./match.ts";
 
 /** The settings of the system-prompt tweak, validated and with the prompt file read. */
 export interface Settings {
@@ -23,6 +23,9 @@ export interface ToolPromptOptions {
 
 const KEYS = new Set(["text", "file", "tools", "toolGuidelines"]);
 
+/** Keys that replace each other when scopes are merged. */
+export const PROMPT_KEYS = ["text", "file"] as const;
+
 function flag(raw: Record<string, unknown>, key: string): boolean {
   const value = raw[key];
   if (value === undefined) return true;
@@ -38,8 +41,7 @@ function promptText(raw: Record<string, unknown>, configDir: string, home: strin
   if (text === undefined && file === undefined) return undefined;
   let content: string;
   if (typeof file === "string") {
-    const expanded = expandHome(file, home);
-    const path = isAbsolute(expanded) ? expanded : resolve(configDir, expanded);
+    const path = file === "~" || file.startsWith("~/") ? expandHome(file, home) : resolve(configDir, file);
     content = readFileSync(path, "utf8");
   } else {
     content = text as string;

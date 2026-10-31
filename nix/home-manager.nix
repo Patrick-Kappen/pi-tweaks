@@ -1,5 +1,8 @@
-# Home Manager module: installs the tweaks you enable and writes their settings to pi-tweaks.json.
+# Home Manager module: installs the tweaks you enable and writes where they apply to pi-tweaks.json.
 #
+# Every tweak is off by default: it does something only where `global` or a `repos` entry says so.
+#
+# How it loads:
 # - An enabled tweak goes to <agentDir>/extensions/pi-tweaks-<name>; pi discovers it, and `pi config`
 #   or `-ne` can turn it off.
 # - An always-on tweak is not discovered: a `pi` wrapper passes it with `-e`, which pi loads even with
@@ -59,13 +62,38 @@ let
           it with `-e`. Off: pi discovers it, and `pi config` can turn it off.
         '';
       };
-      settings = lib.mkOption {
-        inherit (json) type;
-        default = { };
+      global = lib.mkOption {
+        type = lib.types.nullOr json.type;
+        default = null;
         example = lib.literalExpression "{ file = ./system-prompt.md; }";
         description = ''
-          Settings of the tweak, written to its entry in `pi-tweaks.json`; see the README of the tweak.
+          Turns the tweak on everywhere, also outside git repositories, with these settings (see the README
+          of the tweak). null: only where a `repos` entry matches.
+
           A Nix path is copied to the store. The file is world-readable in the store: no secrets.
+        '';
+      };
+      repos = lib.mkOption {
+        type = lib.types.attrsOf json.type;
+        default = { };
+        example = lib.literalExpression ''
+          {
+            "my-org/*".file = ./system-prompt.md;
+            "my-org/legacy".enable = false;
+            "~/src/project" = { file = ./project.md; tools = false; };
+          }
+        '';
+        description = ''
+          Turns the tweak on per repository, with settings on top of `global`. The name is where it applies:
+
+          - a remote: `owner/repo`, `host/owner/repo` or with `*` (`owner/*`). It matches when any remote of
+            the repository ends with it, so it works in every clone and every worktree;
+          - a path starting with `/` or `~/`: it matches that directory and everything below it. Worktrees
+            elsewhere match through the location of their main checkout;
+          - `*`: everywhere, like `global`.
+
+          All matching entries apply, in alphabetical order of their names; later keys win. `enable = false`
+          turns the tweak off there.
         '';
       };
     };
@@ -107,11 +135,14 @@ in
           system-prompt = {
             enable = true;
             alwaysOn = true;
-            settings.file = ./system-prompt.md;
+            repos."my-org/*".file = ./system-prompt.md;
           };
         }
       '';
-      description = "The tweaks by name (a directory of `extensions/`). Only enabled tweaks are installed.";
+      description = ''
+        The tweaks by name (a directory of `extensions/`). Only enabled tweaks are installed, and they do
+        something only where `global` or `repos` turns them on.
+      '';
     };
   };
 
@@ -131,7 +162,10 @@ in
       ) discovered
       // lib.optionalAttrs (enabled != { }) {
         "${cfg.agentDir}/pi-tweaks.json".source = json.generate "pi-tweaks.json" (
-          lib.mapAttrs (_: tweak: tweak.settings) enabled
+          lib.mapAttrs (
+            _: tweak:
+            lib.optionalAttrs (tweak.global != null) { inherit (tweak) global; } // { inherit (tweak) repos; }
+          ) enabled
         );
       };
   };
